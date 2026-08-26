@@ -34,7 +34,7 @@ STABLE
 SECURITY DEFINER
 SET search_path = public
 AS $$
-  SELECT public.current_app_role() = ANY(_roles)
+  SELECT COALESCE(public.current_app_role() = ANY(_roles), FALSE)
 $$;
 
 REVOKE ALL ON FUNCTION public.current_app_role() FROM PUBLIC;
@@ -167,4 +167,3 @@ SELECT id, 'admin'::app_role
 FROM auth.users
 WHERE email = 'admin@festival.local'
 ON CONFLICT (user_id) DO UPDATE SET role = EXCLUDED.role;
-
