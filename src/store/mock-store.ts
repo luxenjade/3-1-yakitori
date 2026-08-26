@@ -6,6 +6,7 @@ import type {
   Item,
   Order,
   OrderStatus,
+  OrderSource,
   TemporaryOrder,
 } from "../types";
 
@@ -128,9 +129,13 @@ class MockStore {
     for (const listener of this.listeners) listener();
   }
 
-  private setState(partial: Partial<AppState> | ((prev: AppState) => AppState)) {
+  private setState(
+    partial: Partial<AppState> | ((prev: AppState) => AppState),
+  ) {
     this.state =
-      typeof partial === "function" ? partial(this.state) : { ...this.state, ...partial };
+      typeof partial === "function"
+        ? partial(this.state)
+        : { ...this.state, ...partial };
     this.emit();
   }
 
@@ -140,7 +145,10 @@ class MockStore {
 
   getWaitingCount(): number {
     return this.state.orders.filter(
-      (o) => o.status === "pending" || o.status === "cooking" || o.status === "ready",
+      (o) =>
+        o.status === "pending" ||
+        o.status === "cooking" ||
+        o.status === "ready",
     ).length;
   }
 
@@ -198,7 +206,10 @@ class MockStore {
     const { id, short_code } = opts;
     return this.state.temporaryOrders.find((o) => {
       if (id && o.id === id) return true;
-      if (short_code && o.short_code.toUpperCase() === short_code.toUpperCase()) {
+      if (
+        short_code &&
+        o.short_code.toUpperCase() === short_code.toUpperCase()
+      ) {
         return true;
       }
       return false;
@@ -208,7 +219,10 @@ class MockStore {
   /** Row-lock equivalent: serializes checkout to prevent oversell. */
   checkout(input: CheckoutInput): CheckoutResponse {
     if (this.locked) {
-      return { ok: false, message: "別の会計処理中です。少し待って再試行してください" };
+      return {
+        ok: false,
+        message: "別の会計処理中です。少し待って再試行してください",
+      };
     }
     this.locked = true;
     try {
@@ -229,7 +243,10 @@ class MockStore {
         short_code: input.short_code,
       });
       if (!temporary) {
-        return { ok: false, message: "仮注文が見つかりません（期限切れの可能性）" };
+        return {
+          ok: false,
+          message: "仮注文が見つかりません（期限切れの可能性）",
+        };
       }
       if (new Date(temporary.expires_at).getTime() < Date.now()) {
         return { ok: false, message: "仮注文の有効期限が切れています" };
@@ -330,7 +347,9 @@ class MockStore {
               ...o,
               status,
               pickup_token: pickupToken(),
-              pickup_expires_at: new Date(Date.now() + 2 * 60 * 1000).toISOString(),
+              pickup_expires_at: new Date(
+                Date.now() + 2 * 60 * 1000,
+              ).toISOString(),
               pickup_used_at: null,
             };
           }
@@ -361,9 +380,15 @@ class MockStore {
     return this.updateOrderStatus(orderId, "cooking");
   }
 
-  verifyPickup(input: { token: string; orderId?: string }): { ok: true } | { ok: false; message: string } {
+  verifyPickup(input: {
+    token: string;
+    orderId?: string;
+  }): { ok: true } | { ok: false; message: string } {
     if (this.pickupLocked) {
-      return { ok: false, message: "別の受け取り確認が処理中です。少し待ってください" };
+      return {
+        ok: false,
+        message: "別の受け取り確認が処理中です。少し待ってください",
+      };
     }
     this.pickupLocked = true;
     try {
@@ -376,14 +401,19 @@ class MockStore {
 
       if (!order) return { ok: false, message: "一致する注文が見つかりません" };
       if (order.status !== "ready")
-        return { ok: false, message: "この注文は受け取り準備完了ではありません" };
+        return {
+          ok: false,
+          message: "この注文は受け取り準備完了ではありません",
+        };
       if (!order.pickup_token || !order.pickup_expires_at)
         return { ok: false, message: "受け取りトークンが無効です" };
-      if (order.pickup_token !== token) return { ok: false, message: "トークンが一致しません" };
+      if (order.pickup_token !== token)
+        return { ok: false, message: "トークンが一致しません" };
       if (new Date(order.pickup_expires_at).getTime() < Date.now()) {
         return { ok: false, message: "トークンの有効期限が切れています" };
       }
-      if (order.pickup_used_at) return { ok: false, message: "この注文は既に確認済みです" };
+      if (order.pickup_used_at)
+        return { ok: false, message: "この注文は既に確認済みです" };
 
       // Mark completed under a critical section (row-lock equivalent)
       this.setState((prev) => ({

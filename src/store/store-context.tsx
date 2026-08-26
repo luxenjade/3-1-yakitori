@@ -2,6 +2,7 @@ import {
   createContext,
   createElement,
   useContext,
+  useEffect,
   useSyncExternalStore,
   type ReactNode,
 } from "react";
@@ -17,7 +18,7 @@ const itemEmoji: Record<string, string> = {
   "つくね（タレ）": "🍡",
   "かわ（塩）": "🔥",
   "ささみ（塩）": "🥩",
-  "お茶": "🍵",
+  お茶: "🍵",
 };
 
 type DbItem = Omit<Item, "image_emoji">;
@@ -32,7 +33,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
     let active = true;
     const loadItems = async () => {
-      const { data, error } = await supabase.from("items").select("*").order("created_at");
+      const { data, error } = await supabase
+        .from("items")
+        .select("*")
+        .order("created_at");
       if (error) {
         console.error("Supabaseの商品取得に失敗しました", error.message);
         return;
@@ -43,9 +47,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     void loadItems();
     const channel = supabase
       .channel("public:items")
-      .on("postgres_changes", { event: "*", schema: "public", table: "items" }, () => {
-        void loadItems();
-      })
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "items" },
+        () => {
+          void loadItems();
+        },
+      )
       .subscribe();
 
     return () => {
@@ -63,5 +71,9 @@ export function useStore() {
 
 export function useAppState(): AppState {
   const store = useStore();
-  return useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
+  return useSyncExternalStore(
+    store.subscribe,
+    store.getSnapshot,
+    store.getSnapshot,
+  );
 }
