@@ -9,6 +9,7 @@ CREATE OR REPLACE FUNCTION checkout_order(
 )
 RETURNS JSONB
 LANGUAGE plpgsql
+SECURITY DEFINER
 AS $$
 DECLARE
   v_temp_id UUID;
@@ -20,7 +21,12 @@ DECLARE
   v_qty INT;
   v_price INT;
   v_ticket INT;
+  v_pickup_token TEXT;
 BEGIN
+  IF NOT public.has_role(ARRAY['pos', 'admin']::app_role[]) THEN
+    RETURN jsonb_build_object('ok', false, 'message', '権限がありません');
+  END IF;
+
   IF p_temporary_order_id IS NOT NULL OR p_short_code IS NOT NULL THEN
     SELECT id INTO v_temp_id
     FROM temporary_orders
@@ -100,3 +106,6 @@ BEGIN
   );
 END;
 $$;
+
+REVOKE ALL ON FUNCTION checkout_order(UUID, VARCHAR, JSONB, TEXT, TEXT) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION checkout_order(UUID, VARCHAR, JSONB, TEXT, TEXT) TO authenticated;

@@ -137,7 +137,7 @@ pnpm install
 
 ```env
 VITE_SUPABASE_URL=https://your-supabase-project.supabase.co
-VITE_SUPABASE_ANON_KEY=your-anon-key
+VITE_SUPABASE_KEY=your-anon-key
 
 ```
 
@@ -148,12 +148,13 @@ pnpm run dev
 
 ```
 
-| パス | 画面 |
-|------|------|
-| `/` | モバイルオーダー |
-| `/pos` | 会計レジ |
-| `/kitchen` | キッチン |
-| `/signage` | サイネージ |
+| パス       | 画面             |
+| ---------- | ---------------- |
+| `/`        | モバイルオーダー |
+| `/pos`     | 会計レジ         |
+| `/kitchen` | キッチン         |
+| `/signage` | サイネージ       |
+
 ---
 
 ## 🛡️ 当日トラブルシューティング & 予備運用

@@ -46,6 +46,9 @@ export interface Order {
   order_source: OrderSource;
   created_at: string;
   items: OrderItem[];
+  pickup_token?: string | null;
+  pickup_expires_at?: string | null;
+  pickup_used_at?: string | null;
 }
 
 export interface CartLine {

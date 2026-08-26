@@ -26,6 +26,16 @@ function shortCode(): string {
   return code;
 }
 
+function pickupToken(): string {
+  // For verification at the pickup counter.
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let code = "";
+  for (let i = 0; i < 8; i++) {
+    code += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return code;
+}
+
 const SEED_ITEMS: Omit<Item, "created_at">[] = [
   {
     id: "item-momo",
@@ -100,6 +110,7 @@ class MockStore {
   private listeners = new Set<Listener>();
   private nextTicket = 100;
   private locked = false;
+  private pickupLocked = false;
 
   subscribe = (listener: Listener): (() => void) => {
     this.listeners.add(listener);
@@ -261,6 +272,9 @@ class MockStore {
       status: "pending",
       order_source: orderSource,
       created_at: nowIso(),
+      pickup_token: null,
+      pickup_expires_at: null,
+      pickup_used_at: null,
       items: lines.map((line) => ({
         id: uid(),
         order_id: orderId,
@@ -297,15 +311,89 @@ class MockStore {
   updateOrderStatus(orderId: string, status: OrderStatus): boolean {
     const exists = this.state.orders.some((o) => o.id === orderId);
     if (!exists) return false;
-    this.setState((prev) => ({
-      ...prev,
-      orders: prev.orders.map((o) => (o.id === orderId ? { ...o, status } : o)),
-    }));
+
+    this.setState((prev) => {
+      const now = nowIso();
+
+      return {
+        ...prev,
+        orders: prev.orders.map((o) => {
+          if (o.id !== orderId) return o;
+
+          if (status === "ready") {
+            return {
+              ...o,
+              status,
+              pickup_token: pickupToken(),
+              pickup_expires_at: new Date(Date.now() + 2 * 60 * 1000).toISOString(),
+              pickup_used_at: null,
+            };
+          }
+
+          if (status === "completed") {
+            return {
+              ...o,
+              status,
+              pickup_used_at: o.pickup_used_at ?? now,
+            };
+          }
+
+          // cooking / pending: clear token (so customer can't use stale screenshots)
+          return {
+            ...o,
+            status,
+            pickup_token: null,
+            pickup_expires_at: null,
+          };
+        }),
+      };
+    });
+
     return true;
   }
 
   restoreOrder(orderId: string): boolean {
     return this.updateOrderStatus(orderId, "cooking");
+  }
+
+  verifyPickup(input: { token: string; orderId?: string }): { ok: true } | { ok: false; message: string } {
+    if (this.pickupLocked) {
+      return { ok: false, message: "別の受け取り確認が処理中です。少し待ってください" };
+    }
+    this.pickupLocked = true;
+    try {
+      const token = input.token.trim().toUpperCase();
+      if (!token) return { ok: false, message: "トークンが空です" };
+
+      const order = input.orderId
+        ? this.state.orders.find((o) => o.id === input.orderId)
+        : this.state.orders.find((o) => (o.pickup_token ?? "") === token);
+
+      if (!order) return { ok: false, message: "一致する注文が見つかりません" };
+      if (order.status !== "ready")
+        return { ok: false, message: "この注文は受け取り準備完了ではありません" };
+      if (!order.pickup_token || !order.pickup_expires_at)
+        return { ok: false, message: "受け取りトークンが無効です" };
+      if (order.pickup_token !== token) return { ok: false, message: "トークンが一致しません" };
+      if (new Date(order.pickup_expires_at).getTime() < Date.now()) {
+        return { ok: false, message: "トークンの有効期限が切れています" };
+      }
+      if (order.pickup_used_at) return { ok: false, message: "この注文は既に確認済みです" };
+
+      // Mark completed under a critical section (row-lock equivalent)
+      this.setState((prev) => ({
+        ...prev,
+        orders: prev.orders.map((o) =>
+          o.id === order.id
+            ? { ...o, status: "completed", pickup_used_at: nowIso() }
+            : o,
+        ),
+      }));
+
+      return { ok: true };
+    } finally {
+      this.pickupLocked = false;
+    }
   }
 
   getSalesTotal(): number {

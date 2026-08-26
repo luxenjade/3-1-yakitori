@@ -161,7 +161,45 @@ export default function PosPage() {
     }, 1000);
   };
 
-  const keypadKeys = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "←", "0", "確定"];
+  // Mobile側で生成している短縮コード文字（mock-store の shortCode と同じ集合）を使う
+  // - I / O を除外（視認性対策）
+  // - 0 / 1 も除外（画像/表示で紛れやすい）
+  const keypadKeys = [
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7",
+    "8",
+    "9",
+    "A",
+    "B",
+    "C",
+    "D",
+    "E",
+    "F",
+    "G",
+    "H",
+    "J",
+    "K",
+    "L",
+    "M",
+    "N",
+    "P",
+    "Q",
+    "R",
+    "S",
+    "T",
+    "U",
+    "V",
+    "W",
+    "X",
+    "Y",
+    "Z",
+    "←",
+    "確定",
+  ];
 
   return (
     <div className="min-h-dvh bg-neutral-100 flex flex-col">
@@ -202,12 +240,12 @@ export default function PosPage() {
             <p className="text-center text-3xl font-black tracking-[0.25em] min-h-[2.5rem]">
               {code || "------"}
             </p>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-6 gap-2">
               {keypadKeys.map((k) => (
                 <button
                   key={k}
                   type="button"
-                  className="h-14 rounded-md bg-white border border-neutral-200 text-xl font-bold active:scale-95 transition-transform"
+                  className="h-12 rounded-md bg-white border border-neutral-200 text-lg font-bold active:scale-95 transition-transform"
                   onClick={() => {
                     if (k === "←") setCode((c) => c.slice(0, -1));
                     else if (k === "確定") loadByCode(code);

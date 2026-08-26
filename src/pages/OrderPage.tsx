@@ -95,6 +95,13 @@ export default function OrderPage() {
   };
 
   if (view === "ticket" && ticketNumber !== null) {
+    const myOrder = state.orders.find((o) => o.ticket_number === ticketNumber) ?? null;
+    const token = myOrder?.pickup_token ?? null;
+    const tokenExpired =
+      myOrder?.pickup_expires_at != null
+        ? new Date(myOrder.pickup_expires_at).getTime() < Date.now()
+        : false;
+
     return (
       <div className="min-h-dvh relative overflow-hidden flex flex-col items-center justify-center p-6 text-white">
         <div className="anti-forgery-bg absolute inset-0 -z-10" />
@@ -103,8 +110,24 @@ export default function OrderPage() {
         <p className="text-3xl font-bold mb-1">
           現在の呼出: {calling != null ? `#${calling}` : "—"}
         </p>
-        <p className="text-sm opacity-80 mt-6 text-center max-w-xs">
-          この画面を提供口でご提示ください。スクリーンショットでは背景が静止します。
+        {myOrder?.status === "ready" && token && !tokenExpired ? (
+          <div className="mt-6 w-full max-w-md flex flex-col items-center gap-4">
+            <p className="text-sm opacity-90 font-bold">提供口での確認用コード</p>
+            <div className="bg-white/15 backdrop-blur border border-white/20 rounded-xl p-4">
+              <QRCodeSVG value={token} size={180} level="M" />
+            </div>
+            <p className="text-3xl font-black tracking-[0.25em] text-white">
+              {token}
+            </p>
+          </div>
+        ) : (
+          <p className="text-sm opacity-80 mt-6 text-center max-w-xs">
+            受け取り準備中です。呼出番号が表示されたら、提供口でコード確認をしてください。
+          </p>
+        )}
+
+        <p className="text-sm opacity-80 mt-4 text-center max-w-xs">
+          スクリーンショットでは背景が静止します。
         </p>
         <button
           type="button"

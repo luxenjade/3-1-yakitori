@@ -17,6 +17,9 @@ export default function KitchenPage() {
   useBeforeUnloadGuard(true);
   const [, setTick] = useState(0);
   const [showHistory, setShowHistory] = useState(false);
+  const [verifyOrderId, setVerifyOrderId] = useState<string | null>(null);
+  const [verifyToken, setVerifyToken] = useState("");
+  const [verifyError, setVerifyError] = useState<string | null>(null);
   const pressTimer = useRef<number | null>(null);
 
   useEffect(() => {
@@ -64,7 +67,9 @@ export default function KitchenPage() {
   const startLongPress = (order: Order) => {
     if (order.status !== "ready") return;
     pressTimer.current = window.setTimeout(() => {
-      store.updateOrderStatus(order.id, "completed");
+      setVerifyOrderId(order.id);
+      setVerifyToken("");
+      setVerifyError(null);
     }, 1000);
   };
 
@@ -161,7 +166,7 @@ export default function KitchenPage() {
                 <p className="text-xs font-bold uppercase tracking-wide mt-1 opacity-80">
                   {order.status === "pending" && "調理待ち · タップで調理開始"}
                   {order.status === "cooking" && "調理中 · タップで提供可"}
-                  {order.status === "ready" && "提供可 · 1秒長押しで完了"}
+                  {order.status === "ready" && "提供可 · 1秒長押しでコード確認"}
                 </p>
                 <ul className="mt-3 space-y-1">
                   {order.items.map((line) => {
@@ -181,6 +186,66 @@ export default function KitchenPage() {
           <p className="text-center text-neutral-500 mt-20 text-lg">注文待ち...</p>
         )}
       </div>
+
+      {verifyOrderId && (
+        <div className="fixed inset-0 z-[100] bg-black/60 flex items-center justify-center p-4">
+          <div className="w-full max-w-md rounded-2xl border border-neutral-700 bg-neutral-900 p-4">
+            <h2 className="text-xl font-black">受け取り確認</h2>
+            <p className="text-neutral-400 text-sm mt-1">
+              顧客が表示している「コード」を入力（または表示のQRを読み取って下さい）
+            </p>
+
+            <div className="mt-4 space-y-2">
+              <label className="text-sm text-neutral-400 block">コード (6桁 + 文字)</label>
+              <input
+                value={verifyToken}
+                onChange={(e) => setVerifyToken(e.target.value.toUpperCase())}
+                className="w-full h-12 rounded-md bg-neutral-800 border border-neutral-700 px-3 text-lg font-bold tracking-[0.12em] outline-none"
+                placeholder="例: AB12CD34"
+                inputMode="text"
+              />
+              {verifyError && (
+                <p className="text-sm bg-rose-50 border border-rose-200 text-rose-700 rounded-md px-3 py-2">
+                  {verifyError}
+                </p>
+              )}
+            </div>
+
+            <div className="mt-4 flex gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setVerifyOrderId(null);
+                  setVerifyToken("");
+                  setVerifyError(null);
+                }}
+                className="h-12 flex-1 rounded-md bg-neutral-800 border border-neutral-700 active:scale-95 transition-transform"
+              >
+                キャンセル
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const result = store.verifyPickup({
+                    token: verifyToken,
+                    orderId: verifyOrderId,
+                  });
+                  if (!result.ok) {
+                    setVerifyError(result.message);
+                    return;
+                  }
+                  setVerifyOrderId(null);
+                  setVerifyToken("");
+                  setVerifyError(null);
+                }}
+                className="h-12 flex-1 rounded-md bg-emerald-600 font-bold text-white active:scale-95 transition-transform"
+              >
+                確認して完了
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

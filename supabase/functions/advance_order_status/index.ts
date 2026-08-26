@@ -1,22 +1,10 @@
 /**
- * Supabase Edge Function: checkout
- * Performs stock decrement under row lock (SELECT FOR UPDATE) then creates an order.
+ * Supabase Edge Function: advance_order_status
  *
- * Deploy: supabase functions deploy checkout
+ * Kitchen/admin only.
+ * Moves `pending -> cooking -> ready`, and issues pickup token on `ready`.
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
-
-type CartLine = { item_id: string; quantity: number };
-type PaymentMethod = "cash" | "ic";
-type OrderSource = "mobile" | "pos";
-
-interface CheckoutBody {
-  temporary_order_id?: string;
-  short_code?: string;
-  lines?: CartLine[];
-  payment_method: PaymentMethod;
-  order_source: OrderSource;
-}
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -29,11 +17,12 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const body = (await req.json()) as CheckoutBody;
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
       return json({ ok: false, message: "認証が必要です" }, 401);
     }
+
+    const body = (await req.json()) as { order_id: string };
 
     const userClient = createClient(
       Deno.env.get("SUPABASE_URL")!,
@@ -60,27 +49,21 @@ Deno.serve(async (req) => {
       .eq("user_id", user.id)
       .single();
 
-    if (roleError || !roleRow || !["pos", "admin"].includes(roleRow.role)) {
-      return json({ ok: false, message: "checkout の権限がありません" }, 403);
+    if (roleError || !roleRow || !["kitchen", "admin"].includes(roleRow.role)) {
+      return json({ ok: false, message: "advance_order_status の権限がありません" }, 403);
     }
 
-    // Prefer a Postgres RPC that wraps SELECT FOR UPDATE in a transaction.
-    // Create with: CREATE FUNCTION checkout_order(...) ...
-    const { data, error } = await userClient.rpc("checkout_order", {
-      p_temporary_order_id: body.temporary_order_id ?? null,
-      p_short_code: body.short_code ?? null,
-      p_lines: body.lines ?? null,
-      p_payment_method: body.payment_method,
-      p_order_source: body.order_source,
+    const { data, error } = await userClient.rpc("advance_order_status", {
+      p_order_id: body.order_id,
     });
 
     if (error) {
       return json({ ok: false, message: error.message }, 400);
     }
 
-    return json(data ?? { ok: true, order: data });
+    return json(data);
   } catch (e) {
-    const message = e instanceof Error ? e.message : "checkout failed";
+    const message = e instanceof Error ? e.message : "advance_order_status failed";
     return json({ ok: false, message }, 500);
   }
 });
@@ -91,3 +74,4 @@ function json(payload: unknown, status = 200) {
     headers: { ...cors, "Content-Type": "application/json" },
   });
 }
+
