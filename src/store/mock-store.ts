@@ -119,6 +119,11 @@ class MockStore {
 
   getSnapshot = (): AppState => this.state;
 
+  /** Hydrates the demo store with the public catalog from Supabase. */
+  replaceItems(items: Item[]) {
+    this.setState((prev) => ({ ...prev, items }));
+  }
+
   private emit() {
     for (const listener of this.listeners) listener();
   }
@@ -216,7 +221,7 @@ class MockStore {
   private checkoutLocked(input: CheckoutInput): CheckoutResponse {
     let lines: CartLine[] = [];
     let temporary: TemporaryOrder | undefined;
-    let orderSource = input.order_source;
+    let orderSource: OrderSource;
 
     if (input.temporary_order_id || input.short_code) {
       temporary = this.findTemporaryOrder({

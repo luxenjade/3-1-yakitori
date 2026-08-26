@@ -26,6 +26,7 @@ export default function OrderPage() {
   const [tempOrder, setTempOrder] = useState<TemporaryOrder | null>(null);
   const [ticketNumber, setTicketNumber] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [now, setNow] = useState(0);
 
   useWakeLock(view === "qr" || view === "ticket");
 
@@ -57,10 +58,18 @@ export default function OrderPage() {
         (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
       )[0];
     if (recent) {
-      setTicketNumber(recent.ticket_number);
-      setView("ticket");
+      const timer = window.setTimeout(() => {
+        setTicketNumber(recent.ticket_number);
+        setView("ticket");
+      }, 0);
+      return () => window.clearTimeout(timer);
     }
   }, [state.orders, state.temporaryOrders, tempOrder, view, ticketNumber]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const add = (item: Item) => {
     if (item.current_stock <= 0) return;
@@ -75,8 +84,7 @@ export default function OrderPage() {
     setCart((prev) => {
       const next = (prev[itemId] ?? 0) - 1;
       if (next <= 0) {
-        const { [itemId]: _, ...rest } = prev;
-        return rest;
+        return Object.fromEntries(Object.entries(prev).filter(([id]) => id !== itemId));
       }
       return { ...prev, [itemId]: next };
     });
@@ -99,7 +107,7 @@ export default function OrderPage() {
     const token = myOrder?.pickup_token ?? null;
     const tokenExpired =
       myOrder?.pickup_expires_at != null
-        ? new Date(myOrder.pickup_expires_at).getTime() < Date.now()
+        ? new Date(myOrder.pickup_expires_at).getTime() < now
         : false;
 
     return (

@@ -22,6 +22,10 @@ export default function PosPage() {
   const [paying, setPaying] = useState(false);
   const [success, setSuccess] = useState(false);
   const scannerRef = useRef<Html5Qrcode | null>(null);
+  const scannerQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const desiredModeRef = useRef<Mode>("scan");
+  const disposedRef = useRef(false);
+  const decodedRef = useRef(false);
   const scanBoxId = "pos-qr-reader";
 
   const loadByCode = useCallback(
@@ -54,41 +58,85 @@ export default function PosPage() {
     [store],
   );
 
+  const loadByCodeRef = useRef(loadByCode);
   useEffect(() => {
+    loadByCodeRef.current = loadByCode;
+  }, [loadByCode]);
+
+  const enqueueScannerOperation = useCallback((operation: () => Promise<void>) => {
+    const next = scannerQueueRef.current.then(operation, operation);
+    scannerQueueRef.current = next.catch(() => undefined);
+    return next;
+  }, []);
+
+  useEffect(() => {
+    disposedRef.current = false;
+    const scanner = new Html5Qrcode(scanBoxId);
+    scannerRef.current = scanner;
+
+    return () => {
+      disposedRef.current = true;
+      if (scannerRef.current === scanner) scannerRef.current = null;
+      void enqueueScannerOperation(async () => {
+        if (scanner.isScanning) await scanner.stop();
+        scanner.clear();
+      });
+    };
+  }, [enqueueScannerOperation]);
+
+  useEffect(() => {
+    desiredModeRef.current = mode;
+    const scanner = scannerRef.current;
+    if (!scanner) return;
+
     if (mode !== "scan") {
-      const s = scannerRef.current;
-      if (s?.isScanning) {
-        void s.stop().catch(() => undefined);
-      }
+      void enqueueScannerOperation(async () => {
+        if (scanner.isScanning) await scanner.stop();
+      });
       return;
     }
 
-    const scanner = new Html5Qrcode(scanBoxId);
-    scannerRef.current = scanner;
-    let alive = true;
-
-    void scanner
-      .start(
-        { facingMode: "environment" },
-        { fps: 8, qrbox: { width: 240, height: 240 } },
-        (decoded) => {
-          if (!alive) return;
-          loadByCode(decoded);
-          void scanner.stop().catch(() => undefined);
-        },
-        () => undefined,
-      )
-      .catch(() => {
-        setError("カメラを起動できません。手入力タブを使ってください");
-      });
-
-    return () => {
-      alive = false;
-      if (scanner.isScanning) {
-        void scanner.stop().catch(() => undefined);
+    void enqueueScannerOperation(async () => {
+      if (
+        disposedRef.current ||
+        scannerRef.current !== scanner ||
+        desiredModeRef.current !== "scan" ||
+        scanner.isScanning
+      ) {
+        return;
       }
-    };
-  }, [mode, loadByCode]);
+
+      decodedRef.current = false;
+      try {
+        await scanner.start(
+          { facingMode: "environment" },
+          { fps: 8, qrbox: { width: 240, height: 240 } },
+          (decoded) => {
+            if (
+              disposedRef.current ||
+              scannerRef.current !== scanner ||
+              desiredModeRef.current !== "scan" ||
+              decodedRef.current
+            ) {
+              return;
+            }
+            decodedRef.current = true;
+            loadByCodeRef.current(decoded);
+          },
+          () => undefined,
+        );
+      } catch {
+        if (!disposedRef.current && desiredModeRef.current === "scan") {
+          setError("カメラを起動できません。手入力タブを使ってください");
+        }
+      }
+    });
+  }, [mode, enqueueScannerOperation]);
+
+  const switchMode = (nextMode: Mode) => {
+    setError(null);
+    setMode(nextMode);
+  };
 
   const displayLines: CartLine[] = temp
     ? temp.items.map((i) => ({ item_id: i.item_id, quantity: i.quantity }))
@@ -108,8 +156,7 @@ export default function PosPage() {
       if (!item) return prev;
       const next = (prev[itemId] ?? 0) + delta;
       if (next <= 0) {
-        const { [itemId]: _, ...rest } = prev;
-        return rest;
+        return Object.fromEntries(Object.entries(prev).filter(([id]) => id !== itemId));
       }
       if (next > item.current_stock) return prev;
       return { ...prev, [itemId]: next };
@@ -216,7 +263,7 @@ export default function PosPage() {
             <button
               key={m}
               type="button"
-              onClick={() => setMode(m)}
+              onClick={() => switchMode(m)}
               className={cn(
                 "h-10 px-3 active:scale-95 transition-transform",
                 mode === m ? "bg-white text-neutral-900 font-bold" : "text-neutral-300",
@@ -229,11 +276,14 @@ export default function PosPage() {
       </header>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-40 max-w-xl mx-auto w-full">
-        {mode === "scan" && (
-          <div className="rounded-lg overflow-hidden bg-black aspect-square max-h-72 mx-auto w-full">
-            <div id={scanBoxId} className="w-full h-full" />
-          </div>
-        )}
+        <div
+          className={cn(
+            "rounded-lg overflow-hidden bg-black aspect-square max-h-72 mx-auto w-full",
+            mode !== "scan" && "hidden",
+          )}
+        >
+          <div id={scanBoxId} className="w-full h-full" />
+        </div>
 
         {mode === "keypad" && (
           <div className="space-y-3">
