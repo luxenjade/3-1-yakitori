@@ -126,13 +126,14 @@ CREATE TABLE order_items (
 ```bash
 git clone https://github.com/your-org/school-festival-pwa.git
 cd school-festival-pwa
-npm install
+pnpm install
 
 ```
 
 ### 2. 環境変数 (.env) の設定
 
-プロジェクトルートに `.env` ファイルを作成し、Supabaseのキーを設定します。
+プロジェクトルートに `.env` ファイルを作成し、Supabaseのキーを設定します（任意）。
+未設定の場合は **メモリ内モックストア** で4画面フローをデモできます。
 
 ```env
 VITE_SUPABASE_URL=https://your-supabase-project.supabase.co
@@ -143,10 +144,16 @@ VITE_SUPABASE_ANON_KEY=your-anon-key
 ### 3. ローカル開発サーバーの起動
 
 ```bash
-npm run dev
+pnpm run dev
 
 ```
 
+| パス | 画面 |
+|------|------|
+| `/` | モバイルオーダー |
+| `/pos` | 会計レジ |
+| `/kitchen` | キッチン |
+| `/signage` | サイネージ |
 ---
 
 ## 🛡️ 当日トラブルシューティング & 予備運用
