@@ -285,13 +285,17 @@ export default function PosPage() {
       <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-40 max-w-xl mx-auto w-full">
         <div
           className={cn(
-            "rounded-lg overflow-hidden bg-black aspect-square max-h-72 mx-auto w-full",
+            "rounded-lg overflow-hidden bg-black aspect-square max-h-72 mx-auto w-full relative",
+            // 内部で生成される video / canvas タグを領域いっぱいに正方形で収めるためのスタイル
+            "[&_video]:w-full [&_video]:h-full [&_video]:object-cover [&_canvas]:absolute [&_canvas]:inset-0",
             mode !== "scan" && "hidden",
           )}
         >
-          <div id={scanBoxId} className="w-full h-full" />
+          <div
+            id={scanBoxId}
+            className="w-full h-full flex items-center justify-center"
+          />
         </div>
-
         {mode === "keypad" && (
           <div className="space-y-3">
             <p className="text-center text-3xl font-black tracking-[0.25em] min-h-[2.5rem]">
