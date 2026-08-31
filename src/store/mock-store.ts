@@ -112,6 +112,7 @@ class MockStore {
   private nextTicket = 100;
   private locked = false;
   private pickupLocked = false;
+  private tempLinks = new Map<string, string>(); // temporaryOrderId -> orderId
 
   subscribe = (listener: Listener): (() => void) => {
     this.listeners.add(listener);
@@ -286,6 +287,9 @@ class MockStore {
 
     const orderId = uid();
     const ticket = this.nextTicket++;
+    if (temporary) {
+      this.tempLinks.set(temporary.id, orderId);
+    }
     const order: Order = {
       id: orderId,
       ticket_number: ticket,
@@ -440,6 +444,12 @@ class MockStore {
       .filter((o) => o.status === "ready")
       .sort((a, b) => a.ticket_number - b.ticket_number);
     return ready[0]?.ticket_number ?? null;
+  }
+
+  getOrderByTemporaryOrderId(temporaryOrderId: string): Order | undefined {
+    const orderId = this.tempLinks.get(temporaryOrderId);
+    if (!orderId) return undefined;
+    return this.state.orders.find((o) => o.id === orderId);
   }
 }
 

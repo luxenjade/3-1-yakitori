@@ -29,13 +29,13 @@ export default function PosPage() {
   const scanBoxId = "pos-qr-reader";
 
   const loadByCode = useCallback(
-    (raw: string) => {
+    async (raw: string) => {
       setError(null);
       let short = raw.trim().toUpperCase();
       try {
         const parsed = JSON.parse(raw) as { code?: string; id?: string };
         if (parsed.code) short = parsed.code.toUpperCase();
-        const found = store.findTemporaryOrder({
+        const found = await store.findTemporaryOrder({
           id: parsed.id,
           short_code: parsed.code ?? short,
         });
@@ -47,7 +47,7 @@ export default function PosPage() {
       } catch {
         // plain short code
       }
-      const found = store.findTemporaryOrder({ short_code: short });
+      const found = await store.findTemporaryOrder({ short_code: short });
       if (!found) {
         setError("仮注文が見つかりません");
         setTemp(null);
@@ -63,11 +63,14 @@ export default function PosPage() {
     loadByCodeRef.current = loadByCode;
   }, [loadByCode]);
 
-  const enqueueScannerOperation = useCallback((operation: () => Promise<void>) => {
-    const next = scannerQueueRef.current.then(operation, operation);
-    scannerQueueRef.current = next.catch(() => undefined);
-    return next;
-  }, []);
+  const enqueueScannerOperation = useCallback(
+    (operation: () => Promise<void>) => {
+      const next = scannerQueueRef.current.then(operation, operation);
+      scannerQueueRef.current = next.catch(() => undefined);
+      return next;
+    },
+    [],
+  );
 
   useEffect(() => {
     disposedRef.current = false;
@@ -121,7 +124,7 @@ export default function PosPage() {
               return;
             }
             decodedRef.current = true;
-            loadByCodeRef.current(decoded);
+            void loadByCodeRef.current(decoded);
           },
           () => undefined,
         );
@@ -156,7 +159,9 @@ export default function PosPage() {
       if (!item) return prev;
       const next = (prev[itemId] ?? 0) + delta;
       if (next <= 0) {
-        return Object.fromEntries(Object.entries(prev).filter(([id]) => id !== itemId));
+        return Object.fromEntries(
+          Object.entries(prev).filter(([id]) => id !== itemId),
+        );
       }
       if (next > item.current_stock) return prev;
       return { ...prev, [itemId]: next };
@@ -266,7 +271,9 @@ export default function PosPage() {
               onClick={() => switchMode(m)}
               className={cn(
                 "h-10 px-3 active:scale-95 transition-transform",
-                mode === m ? "bg-white text-neutral-900 font-bold" : "text-neutral-300",
+                mode === m
+                  ? "bg-white text-neutral-900 font-bold"
+                  : "text-neutral-300",
               )}
             >
               {label}
@@ -298,7 +305,7 @@ export default function PosPage() {
                   className="h-12 rounded-md bg-white border border-neutral-200 text-lg font-bold active:scale-95 transition-transform"
                   onClick={() => {
                     if (k === "←") setCode((c) => c.slice(0, -1));
-                    else if (k === "確定") loadByCode(code);
+                    else if (k === "確定") void loadByCode(code);
                     else if (code.length < 6) setCode((c) => c + k);
                   }}
                 >
@@ -350,7 +357,10 @@ export default function PosPage() {
               const item = state.items.find((i) => i.id === line.item_id);
               if (!item) return null;
               return (
-                <div key={line.item_id} className="flex items-center gap-2 py-1">
+                <div
+                  key={line.item_id}
+                  className="flex items-center gap-2 py-1"
+                >
                   <div className="flex-1">
                     <p className="font-medium">{item.name}</p>
                     <p className="text-sm text-neutral-500">
@@ -366,7 +376,9 @@ export default function PosPage() {
                       >
                         <Minus className="h-5 w-5" />
                       </button>
-                      <span className="text-2xl font-bold w-8 text-center">{line.quantity}</span>
+                      <span className="text-2xl font-bold w-8 text-center">
+                        {line.quantity}
+                      </span>
                       <button
                         type="button"
                         className="h-12 w-12 rounded-md border active:scale-95 flex items-center justify-center"
@@ -382,12 +394,16 @@ export default function PosPage() {
                 </div>
               );
             })}
-            <p className="text-3xl font-black pt-2 border-t">¥{total.toLocaleString()}</p>
+            <p className="text-3xl font-black pt-2 border-t">
+              ¥{total.toLocaleString()}
+            </p>
           </section>
         )}
 
         {mode === "manual" && displayLines.length > 0 && (
-          <p className="text-3xl font-black text-right">¥{total.toLocaleString()}</p>
+          <p className="text-3xl font-black text-right">
+            ¥{total.toLocaleString()}
+          </p>
         )}
 
         {error && (

@@ -30,8 +30,16 @@ export default function KitchenPage() {
   const activeOrders = useMemo(
     () =>
       state.orders
-        .filter((o) => o.status === "pending" || o.status === "cooking" || o.status === "ready")
-        .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()),
+        .filter(
+          (o) =>
+            o.status === "pending" ||
+            o.status === "cooking" ||
+            o.status === "ready",
+        )
+        .sort(
+          (a, b) =>
+            new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+        ),
     [state.orders],
   );
 
@@ -39,7 +47,10 @@ export default function KitchenPage() {
     () =>
       state.orders
         .filter((o) => o.status === "completed")
-        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+        .sort(
+          (a, b) =>
+            new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+        )
         .slice(0, 20),
     [state.orders],
   );
@@ -58,9 +69,9 @@ export default function KitchenPage() {
 
   const onCardTap = (order: Order) => {
     if (order.status === "pending") {
-      store.updateOrderStatus(order.id, "cooking");
+      void store.updateOrderStatus(order.id, "cooking");
     } else if (order.status === "cooking") {
-      store.updateOrderStatus(order.id, "ready");
+      void store.updateOrderStatus(order.id, "ready");
     }
   };
 
@@ -112,7 +123,9 @@ export default function KitchenPage() {
 
       {showHistory && (
         <div className="bg-neutral-800 border-b border-neutral-700 px-4 py-3 max-h-48 overflow-y-auto">
-          <p className="text-sm text-neutral-400 mb-2">完了履歴（タップで調理中に戻す）</p>
+          <p className="text-sm text-neutral-400 mb-2">
+            完了履歴（タップで調理中に戻す）
+          </p>
           <ul className="space-y-1">
             {completed.length === 0 && (
               <li className="text-neutral-500 text-sm">履歴なし</li>
@@ -121,12 +134,14 @@ export default function KitchenPage() {
               <li key={o.id}>
                 <button
                   type="button"
-                  onClick={() => store.restoreOrder(o.id)}
+                  onClick={() => void store.restoreOrder(o.id)}
                   className="w-full flex items-center gap-2 h-12 px-3 rounded-md bg-neutral-900 active:scale-95 transition-transform text-left"
                 >
                   <RotateCcw className="h-4 w-4 text-amber-400" />
                   <span className="font-bold">#{o.ticket_number}</span>
-                  <span className="text-neutral-400 text-sm">¥{o.total_price}</span>
+                  <span className="text-neutral-400 text-sm">
+                    ¥{o.total_price}
+                  </span>
                 </button>
               </li>
             ))}
@@ -160,7 +175,9 @@ export default function KitchenPage() {
                 )}
               >
                 <div className="flex items-baseline justify-between gap-2">
-                  <span className="text-4xl font-black">#{order.ticket_number}</span>
+                  <span className="text-4xl font-black">
+                    #{order.ticket_number}
+                  </span>
                   <span className="text-sm font-semibold">{mins}分経過</span>
                 </div>
                 <p className="text-xs font-bold uppercase tracking-wide mt-1 opacity-80">
@@ -183,7 +200,9 @@ export default function KitchenPage() {
           })}
         </div>
         {activeOrders.length === 0 && (
-          <p className="text-center text-neutral-500 mt-20 text-lg">注文待ち...</p>
+          <p className="text-center text-neutral-500 mt-20 text-lg">
+            注文待ち...
+          </p>
         )}
       </div>
 
@@ -196,7 +215,9 @@ export default function KitchenPage() {
             </p>
 
             <div className="mt-4 space-y-2">
-              <label className="text-sm text-neutral-400 block">コード (6桁 + 文字)</label>
+              <label className="text-sm text-neutral-400 block">
+                コード (6桁 + 文字)
+              </label>
               <input
                 value={verifyToken}
                 onChange={(e) => setVerifyToken(e.target.value.toUpperCase())}
@@ -225,8 +246,8 @@ export default function KitchenPage() {
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  const result = store.verifyPickup({
+                onClick={async () => {
+                  const result = await store.verifyPickup({
                     token: verifyToken,
                     orderId: verifyOrderId,
                   });

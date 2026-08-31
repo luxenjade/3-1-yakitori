@@ -4,6 +4,7 @@ import { Minus, Plus, ShoppingBag, X } from "lucide-react";
 import { useAppState, useStore } from "../store/store-context";
 import { useWakeLock } from "../hooks/useWakeLock";
 import type { CartLine, Item, TemporaryOrder } from "../types";
+import type { PickupPollResult } from "../store/types";
 import { cn } from "../lib/utils";
 
 type View = "menu" | "qr" | "ticket";
@@ -25,6 +26,7 @@ export default function OrderPage() {
   const [view, setView] = useState<View>("menu");
   const [tempOrder, setTempOrder] = useState<TemporaryOrder | null>(null);
   const [ticketNumber, setTicketNumber] = useState<number | null>(null);
+  const [pollResult, setPollResult] = useState<PickupPollResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState(0);
 
@@ -48,23 +50,29 @@ export default function OrderPage() {
   const eta = store.getEstimatedWaitMinutes();
   const calling = store.getCurrentCallingTicket();
 
+  // 仮注文がレジで会計されたかを定期的に確認する（匿名客はordersを直接読めないため専用RPC経由）
   useEffect(() => {
-    if (!tempOrder || view !== "qr" || ticketNumber !== null) return;
-    const stillExists = state.temporaryOrders.some((o) => o.id === tempOrder.id);
-    if (stillExists) return;
-    const recent = [...state.orders]
-      .filter((o) => o.total_price === tempOrder.total_price)
-      .sort(
-        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
-      )[0];
-    if (recent) {
-      const timer = window.setTimeout(() => {
-        setTicketNumber(recent.ticket_number);
-        setView("ticket");
-      }, 0);
-      return () => window.clearTimeout(timer);
-    }
-  }, [state.orders, state.temporaryOrders, tempOrder, view, ticketNumber]);
+    if (!tempOrder) return;
+    let cancelled = false;
+
+    const check = async () => {
+      const result = await store.pollTemporaryOrderResult(tempOrder.id);
+      if (cancelled) return;
+      setPollResult(result);
+      if (result.found && result.ticket_number != null) {
+        setTicketNumber((prev) => prev ?? result.ticket_number!);
+        setView((prev) => (prev === "menu" ? prev : "ticket"));
+      }
+    };
+
+    void check();
+    const interval = window.setInterval(check, 3000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tempOrder]);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
@@ -84,17 +92,20 @@ export default function OrderPage() {
     setCart((prev) => {
       const next = (prev[itemId] ?? 0) - 1;
       if (next <= 0) {
-        return Object.fromEntries(Object.entries(prev).filter(([id]) => id !== itemId));
+        return Object.fromEntries(
+          Object.entries(prev).filter(([id]) => id !== itemId),
+        );
       }
       return { ...prev, [itemId]: next };
     });
   };
 
-  const confirmTemp = () => {
+  const confirmTemp = async () => {
     setError(null);
     try {
-      const order = store.createTemporaryOrder(lines);
+      const order = await store.createTemporaryOrder(lines);
       setTempOrder(order);
+      setPollResult(null);
       setCart({});
       setView("qr");
     } catch (e) {
@@ -103,24 +114,27 @@ export default function OrderPage() {
   };
 
   if (view === "ticket" && ticketNumber !== null) {
-    const myOrder = state.orders.find((o) => o.ticket_number === ticketNumber) ?? null;
-    const token = myOrder?.pickup_token ?? null;
+    const token = pollResult?.pickup_token ?? null;
     const tokenExpired =
-      myOrder?.pickup_expires_at != null
-        ? new Date(myOrder.pickup_expires_at).getTime() < now
+      pollResult?.pickup_expires_at != null
+        ? new Date(pollResult.pickup_expires_at).getTime() < now
         : false;
 
     return (
       <div className="min-h-dvh relative overflow-hidden flex flex-col items-center justify-center p-6 text-white">
         <div className="anti-forgery-bg absolute inset-0 -z-10" />
         <p className="text-lg font-medium opacity-90 mb-2">引き換え番号</p>
-        <p className="text-6xl font-black tracking-tight mb-8">#{ticketNumber}</p>
+        <p className="text-6xl font-black tracking-tight mb-8">
+          #{ticketNumber}
+        </p>
         <p className="text-3xl font-bold mb-1">
           現在の呼出: {calling != null ? `#${calling}` : "—"}
         </p>
-        {myOrder?.status === "ready" && token && !tokenExpired ? (
+        {pollResult?.status === "ready" && token && !tokenExpired ? (
           <div className="mt-6 w-full max-w-md flex flex-col items-center gap-4">
-            <p className="text-sm opacity-90 font-bold">提供口での確認用コード</p>
+            <p className="text-sm opacity-90 font-bold">
+              提供口での確認用コード
+            </p>
             <div className="bg-white/15 backdrop-blur border border-white/20 rounded-xl p-4">
               <QRCodeSVG value={token} size={180} level="M" />
             </div>
@@ -144,6 +158,7 @@ export default function OrderPage() {
             setView("menu");
             setTempOrder(null);
             setTicketNumber(null);
+            setPollResult(null);
           }}
         >
           メニューに戻る
@@ -173,7 +188,9 @@ export default function OrderPage() {
           <p className="text-3xl font-black tracking-[0.2em] text-neutral-900 mt-1">
             {tempOrder.short_code}
           </p>
-          <p className="mt-4 text-2xl font-bold">¥{tempOrder.total_price.toLocaleString()}</p>
+          <p className="mt-4 text-2xl font-bold">
+            ¥{tempOrder.total_price.toLocaleString()}
+          </p>
           <p className="mt-6 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-4 py-3 text-center">
             レジで決済するまで商品は確保されません
           </p>
@@ -183,6 +200,7 @@ export default function OrderPage() {
             onClick={() => {
               setView("menu");
               setTempOrder(null);
+              setPollResult(null);
             }}
           >
             メニューに戻る
@@ -221,7 +239,9 @@ export default function OrderPage() {
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <p className="font-bold text-neutral-900 truncate">{item.name}</p>
+                  <p className="font-bold text-neutral-900 truncate">
+                    {item.name}
+                  </p>
                   <span
                     className={cn(
                       "text-[10px] font-semibold px-1.5 py-0.5 rounded",
@@ -262,7 +282,11 @@ export default function OrderPage() {
       {error && (
         <p className="fixed bottom-28 inset-x-4 max-w-lg mx-auto text-center text-sm text-rose-600 bg-rose-50 border border-rose-200 rounded-md py-2 px-3">
           {error}
-          <button type="button" className="ml-2 underline" onClick={() => setError(null)}>
+          <button
+            type="button"
+            className="ml-2 underline"
+            onClick={() => setError(null)}
+          >
             <X className="inline h-3 w-3" />
           </button>
         </p>
@@ -275,12 +299,14 @@ export default function OrderPage() {
               <ShoppingBag className="h-4 w-4" />
               {totalQty}点
             </p>
-            <p className="text-2xl font-black">¥{totalPrice.toLocaleString()}</p>
+            <p className="text-2xl font-black">
+              ¥{totalPrice.toLocaleString()}
+            </p>
           </div>
           <button
             type="button"
             disabled={totalQty === 0}
-            onClick={confirmTemp}
+            onClick={() => void confirmTemp()}
             className="h-14 flex-1 max-w-[220px] rounded-md bg-neutral-900 text-white font-bold text-base active:scale-95 transition-transform disabled:opacity-40"
           >
             仮注文を確認する
