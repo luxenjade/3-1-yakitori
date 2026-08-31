@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { History, RotateCcw } from "lucide-react";
+import { Html5Qrcode } from "html5-qrcode";
+import { History, RotateCcw, ScanLine } from "lucide-react";
 import { useAppState, useStore } from "../store/store-context";
 import { useWakeLock } from "../hooks/useWakeLock";
 import { useBeforeUnloadGuard } from "../hooks/useBeforeUnloadGuard";
@@ -10,6 +11,8 @@ function elapsedMinutes(iso: string): number {
   return Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
 }
 
+const PICKUP_SCAN_BOX_ID = "kitchen-pickup-scanner";
+
 export default function KitchenPage() {
   const state = useAppState();
   const store = useStore();
@@ -18,9 +21,10 @@ export default function KitchenPage() {
   const [, setTick] = useState(0);
   const [showHistory, setShowHistory] = useState(false);
   const [verifyOrderId, setVerifyOrderId] = useState<string | null>(null);
-  const [verifyToken, setVerifyToken] = useState("");
   const [verifyError, setVerifyError] = useState<string | null>(null);
+  const [verifying, setVerifying] = useState(false);
   const pressTimer = useRef<number | null>(null);
+  const decodedLockRef = useRef(false);
 
   useEffect(() => {
     const id = window.setInterval(() => setTick((t) => t + 1), 15000);
@@ -78,9 +82,9 @@ export default function KitchenPage() {
   const startLongPress = (order: Order) => {
     if (order.status !== "ready") return;
     pressTimer.current = window.setTimeout(() => {
-      setVerifyOrderId(order.id);
-      setVerifyToken("");
+      decodedLockRef.current = false;
       setVerifyError(null);
+      setVerifyOrderId(order.id);
     }, 1000);
   };
 
@@ -90,6 +94,69 @@ export default function KitchenPage() {
       pressTimer.current = null;
     }
   };
+
+  // 受け取り確認モーダルが開いている間だけカメラを起動する。
+  // QRを読み取ったら即座に verifyPickup を呼び、成功すればモーダルを閉じる。
+  // 不一致の場合はエラーを一時表示し、カメラは止めずに再スキャンを受け付ける。
+  useEffect(() => {
+    if (!verifyOrderId) return;
+
+    let cancelled = false;
+    const scanner = new Html5Qrcode(PICKUP_SCAN_BOX_ID);
+    let cameraFailed = false;
+
+    const handleDecode = async (decodedText: string) => {
+      if (cancelled || decodedLockRef.current) return;
+      decodedLockRef.current = true;
+      setVerifying(true);
+      const result = await store.verifyPickup({
+        token: decodedText.trim(),
+        orderId: verifyOrderId,
+      });
+      if (cancelled) return;
+      setVerifying(false);
+      if (!result.ok) {
+        setVerifyError(result.message);
+        window.setTimeout(() => {
+          decodedLockRef.current = false;
+          if (!cancelled) setVerifyError(null);
+        }, 1500);
+        return;
+      }
+      setVerifyOrderId(null);
+    };
+
+    const start = async () => {
+      try {
+        await scanner.start(
+          { facingMode: "environment" },
+          { fps: 8, qrbox: { width: 240, height: 240 } },
+          (decoded) => void handleDecode(decoded),
+          () => undefined,
+        );
+      } catch {
+        if (!cancelled) {
+          cameraFailed = true;
+          setVerifyError(
+            "カメラを起動できません。カメラの許可設定を確認してください",
+          );
+        }
+      }
+    };
+    void start();
+
+    return () => {
+      cancelled = true;
+      if (!cameraFailed) {
+        void scanner
+          .stop()
+          .catch(() => undefined)
+          .then(() => scanner.clear());
+      } else {
+        scanner.clear();
+      }
+    };
+  }, [verifyOrderId, store]);
 
   return (
     <div className="min-h-dvh bg-neutral-900 text-white flex flex-col">
@@ -183,7 +250,7 @@ export default function KitchenPage() {
                 <p className="text-xs font-bold uppercase tracking-wide mt-1 opacity-80">
                   {order.status === "pending" && "調理待ち · タップで調理開始"}
                   {order.status === "cooking" && "調理中 · タップで提供可"}
-                  {order.status === "ready" && "提供可 · 1秒長押しでコード確認"}
+                  {order.status === "ready" && "提供可 · 1秒長押しでQRスキャン"}
                 </p>
                 <ul className="mt-3 space-y-1">
                   {order.items.map((line) => {
@@ -209,61 +276,39 @@ export default function KitchenPage() {
       {verifyOrderId && (
         <div className="fixed inset-0 z-[100] bg-black/60 flex items-center justify-center p-4">
           <div className="w-full max-w-md rounded-2xl border border-neutral-700 bg-neutral-900 p-4">
-            <h2 className="text-xl font-black">受け取り確認</h2>
+            <div className="flex items-center gap-2">
+              <ScanLine className="h-6 w-6 text-emerald-400" />
+              <h2 className="text-xl font-black">受け取り確認 · QRスキャン</h2>
+            </div>
             <p className="text-neutral-400 text-sm mt-1">
-              顧客が表示している「コード」を入力（または表示のQRを読み取って下さい）
+              顧客が表示している画面のQRコードにカメラを向けてください
             </p>
 
-            <div className="mt-4 space-y-2">
-              <label className="text-sm text-neutral-400 block">
-                コード (6桁 + 文字)
-              </label>
-              <input
-                value={verifyToken}
-                onChange={(e) => setVerifyToken(e.target.value.toUpperCase())}
-                className="w-full h-12 rounded-md bg-neutral-800 border border-neutral-700 px-3 text-lg font-bold tracking-[0.12em] outline-none"
-                placeholder="例: AB12CD34"
-                inputMode="text"
-              />
-              {verifyError && (
-                <p className="text-sm bg-rose-50 border border-rose-200 text-rose-700 rounded-md px-3 py-2">
-                  {verifyError}
-                </p>
+            <div className="mt-4 rounded-lg overflow-hidden bg-black aspect-square max-h-80 mx-auto w-full relative">
+              <div id={PICKUP_SCAN_BOX_ID} className="w-full h-full" />
+              {verifying && (
+                <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                  <p className="text-white font-bold">確認中...</p>
+                </div>
               )}
             </div>
 
-            <div className="mt-4 flex gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setVerifyOrderId(null);
-                  setVerifyToken("");
-                  setVerifyError(null);
-                }}
-                className="h-12 flex-1 rounded-md bg-neutral-800 border border-neutral-700 active:scale-95 transition-transform"
-              >
-                キャンセル
-              </button>
-              <button
-                type="button"
-                onClick={async () => {
-                  const result = await store.verifyPickup({
-                    token: verifyToken,
-                    orderId: verifyOrderId,
-                  });
-                  if (!result.ok) {
-                    setVerifyError(result.message);
-                    return;
-                  }
-                  setVerifyOrderId(null);
-                  setVerifyToken("");
-                  setVerifyError(null);
-                }}
-                className="h-12 flex-1 rounded-md bg-emerald-600 font-bold text-white active:scale-95 transition-transform"
-              >
-                確認して完了
-              </button>
-            </div>
+            {verifyError && (
+              <p className="mt-3 text-sm bg-rose-50 border border-rose-200 text-rose-700 rounded-md px-3 py-2">
+                {verifyError}
+              </p>
+            )}
+
+            <button
+              type="button"
+              onClick={() => {
+                setVerifyOrderId(null);
+                setVerifyError(null);
+              }}
+              className="mt-4 h-12 w-full rounded-md bg-neutral-800 border border-neutral-700 active:scale-95 transition-transform"
+            >
+              キャンセル
+            </button>
           </div>
         </div>
       )}
