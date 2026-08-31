@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
-import { Minus, Plus, ShoppingBag, X } from "lucide-react";
+import { CheckCircle2, Minus, Plus, ShoppingBag, X } from "lucide-react";
 import { useAppState, useStore } from "../store/store-context";
 import { useWakeLock } from "../hooks/useWakeLock";
 import type { CartLine, Item, TemporaryOrder } from "../types";
@@ -54,6 +54,7 @@ export default function OrderPage() {
   useEffect(() => {
     if (!tempOrder) return;
     let cancelled = false;
+    let interval: number | null = null;
 
     const check = async () => {
       const result = await store.pollTemporaryOrderResult(tempOrder.id);
@@ -63,16 +64,19 @@ export default function OrderPage() {
         setTicketNumber((prev) => prev ?? result.ticket_number!);
         setView((prev) => (prev === "menu" ? prev : "ticket"));
       }
+      if (result.status === "completed" && interval != null) {
+        window.clearInterval(interval);
+        interval = null;
+      }
     };
 
     void check();
-    const interval = window.setInterval(check, 3000);
+    interval = window.setInterval(check, 3000);
     return () => {
       cancelled = true;
-      window.clearInterval(interval);
+      if (interval != null) window.clearInterval(interval);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tempOrder]);
+  }, [tempOrder, store]);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
@@ -119,6 +123,35 @@ export default function OrderPage() {
       pollResult?.pickup_expires_at != null
         ? new Date(pollResult.pickup_expires_at).getTime() < now
         : false;
+
+    const isCompleted = pollResult?.status === "completed";
+
+    if (isCompleted) {
+      return (
+        <div className="min-h-dvh bg-emerald-600 flex flex-col items-center justify-center p-6 text-white">
+          <CheckCircle2 className="h-24 w-24 stroke-[1.5]" />
+          <p className="text-2xl font-bold mt-6">受け取り完了</p>
+          <p className="text-6xl font-black tracking-tight mt-2">
+            #{ticketNumber}
+          </p>
+          <p className="text-lg opacity-90 mt-6">
+            ご利用ありがとうございました！
+          </p>
+          <button
+            type="button"
+            className="mt-10 h-12 px-6 rounded-md bg-white/20 active:scale-95 transition-transform"
+            onClick={() => {
+              setView("menu");
+              setTempOrder(null);
+              setTicketNumber(null);
+              setPollResult(null);
+            }}
+          >
+            メニューに戻る
+          </button>
+        </div>
+      );
+    }
 
     return (
       <div className="min-h-dvh relative overflow-hidden flex flex-col items-center justify-center p-6 text-white">
