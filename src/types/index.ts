@@ -1,84 +1,56 @@
 export type PaymentMethod = "cash" | "ic";
-export type OrderSource = "mobile" | "pos";
-export type OrderStatus = "pending" | "cooking" | "ready" | "completed";
-export type ItemStatus = "active" | "sold_out";
 
-export interface Item {
+export interface StockItem {
   id: string;
   name: string;
-  price: number;
   initial_stock: number;
   current_stock: number;
-  status: ItemStatus;
-  image_emoji: string;
   created_at: string;
 }
 
-export interface TemporaryOrderItem {
+export interface MenuItem {
   id: string;
-  temporary_order_id: string;
-  item_id: string;
-  quantity: number;
-}
-
-export interface TemporaryOrder {
-  id: string;
-  short_code: string;
-  total_price: number;
-  expires_at: string;
+  stock_item_id: string;
+  name: string;
+  price: number;
   created_at: string;
-  items: TemporaryOrderItem[];
 }
 
-export interface OrderItem {
-  id: string;
-  order_id: string;
-  item_id: string;
+export interface SaleLine {
+  menu_item_id: string;
   quantity: number;
 }
 
-export interface Order {
+export interface SaleItem {
   id: string;
-  ticket_number: number;
+  menu_item_id: string;
+  quantity: number;
+  unit_price: number;
+}
+
+export interface Sale {
+  id: string;
   total_price: number;
   payment_method: PaymentMethod;
-  status: OrderStatus;
-  order_source: OrderSource;
   created_at: string;
-  items: OrderItem[];
-  pickup_token?: string | null;
-  pickup_expires_at?: string | null;
-  pickup_used_at?: string | null;
+  items: SaleItem[];
 }
 
-export interface CartLine {
-  item_id: string;
-  quantity: number;
+export interface StoreStatus {
+  waiting_count: number;
+  sales_goal: number;
+  updated_at: string;
 }
-
-export interface CheckoutInput {
-  temporary_order_id?: string;
-  short_code?: string;
-  lines?: CartLine[];
-  payment_method: PaymentMethod;
-  order_source: OrderSource;
-}
-
-export interface CheckoutResult {
-  ok: true;
-  order: Order;
-}
-
-export interface CheckoutError {
-  ok: false;
-  message: string;
-}
-
-export type CheckoutResponse = CheckoutResult | CheckoutError;
 
 export interface AppState {
-  items: Item[];
-  temporaryOrders: TemporaryOrder[];
-  orders: Order[];
-  salesGoal: number;
+  stockItems: StockItem[];
+  menuItems: MenuItem[];
+  sales: Sale[];
+  status: StoreStatus;
+}
+
+export interface RecordSaleResult {
+  ok: boolean;
+  message?: string;
+  sale?: { id: string; total_price: number; payment_method: PaymentMethod };
 }

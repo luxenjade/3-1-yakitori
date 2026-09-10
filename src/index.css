@@ -48,20 +48,6 @@
   }
 }
 
-/* Anti-screenshot gradient for ticket screen */
-.anti-forgery-bg {
-  background: linear-gradient(
-    125deg,
-    #059669,
-    #0ea5e9,
-    #f59e0b,
-    #e11d48,
-    #059669
-  );
-  background-size: 400% 400%;
-  animation: forge-shift 8s ease infinite;
-}
-
 @keyframes forge-shift {
   0% {
     background-position: 0% 50%;
