@@ -1,11 +1,11 @@
 {
-  "name": "文化祭焼き鳥オーダー",
-  "short_name": "焼き鳥",
-  "description": "文化祭食品販売用 注文・会計・キッチン・サイネージ PWA",
+  "name": "責任トリません",
+  "short_name": "責任トリません",
+  "description": "文化祭限定・屋台「責任トリません」の在庫・売上サイネージ",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#171717",
-  "theme_color": "#171717",
+  "background_color": "#1C1712",
+  "theme_color": "#1C1712",
   "lang": "ja",
   "icons": [
     {

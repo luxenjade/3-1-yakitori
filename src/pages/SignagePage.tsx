@@ -1,5 +1,6 @@
 import { useAppState } from "../store/store-context";
 import { Progress } from "../components/ui/progress";
+import { StockBarChart } from "../components/StockBarChart";
 
 export default function SignagePage() {
   const state = useAppState();
@@ -10,7 +11,7 @@ export default function SignagePage() {
   return (
     <div className="min-h-dvh bg-neutral-950 text-white p-6 md:p-10">
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 h-full min-h-[calc(100dvh-5rem)]">
-        <section className="lg:col-span-2 flex flex-col items-center justify-center rounded-2xl bg-neutral-900 border border-neutral-800 p-8">
+        <section className="lg:col-span-2 flex flex-col items-center justify-center rounded-2xl bg-neutral-900 border border-amber-900/40 p-8">
           <p className="text-2xl text-neutral-400 font-medium mb-4">
             ただいまの待ち人数
           </p>
@@ -20,41 +21,14 @@ export default function SignagePage() {
         </section>
 
         <section className="lg:col-span-3 flex flex-col gap-6">
-          <div className="rounded-2xl bg-neutral-900 border border-neutral-800 p-6">
-            <h2 className="text-xl text-neutral-400 font-semibold mb-4">
+          <div className="flex-1 rounded-2xl bg-neutral-900 border border-amber-900/40 p-6 md:p-8">
+            <h2 className="text-xl text-neutral-400 font-semibold mb-6">
               在庫状況
             </h2>
-            <div className="grid grid-cols-2 gap-4">
-              {state.stockItems.map((stock) => {
-                const pctLeft =
-                  stock.initial_stock > 0
-                    ? Math.round(
-                        (stock.current_stock / stock.initial_stock) * 100,
-                      )
-                    : 0;
-                const soldOut = stock.current_stock <= 0;
-                return (
-                  <div key={stock.id} className="rounded-xl bg-neutral-800 p-4">
-                    <p className="text-lg font-bold">{stock.name}</p>
-                    {soldOut ? (
-                      <p className="text-2xl font-black text-zinc-400 mt-2">
-                        完売
-                      </p>
-                    ) : (
-                      <>
-                        <p className="text-3xl font-black mt-2">
-                          残り {stock.current_stock}本
-                        </p>
-                        <Progress value={pctLeft} className="h-3 mt-2" />
-                      </>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+            <StockBarChart stockItems={state.stockItems} />
           </div>
 
-          <div className="rounded-2xl bg-neutral-900 border border-neutral-800 p-6">
+          <div className="rounded-2xl bg-neutral-900 border border-amber-900/40 p-6">
             <div className="flex items-baseline justify-between mb-2">
               <h2 className="text-xl text-neutral-400 font-semibold">
                 売上目標

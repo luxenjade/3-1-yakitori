@@ -29,6 +29,15 @@ export default {
           4: "hsl(var(--chart-4))",
           5: "hsl(var(--chart-5))",
         },
+        // 店舗ブランドカラー（テント地・のぼり・木枠）
+        mustard: { DEFAULT: "#E3A73B", deep: "#C98A1F", pale: "#F3D48A" },
+        ink: "#1C1712",
+        paper: "#F6EEDB",
+        hanten: "#BE3628",
+        wood: "#7A4B28",
+      },
+      fontFamily: {
+        display: ['"Yuji Syuku"', "serif"],
       },
     },
   },
