@@ -8,21 +8,16 @@ import {
   type ReactNode,
 } from "react";
 import { dataStore } from "./data-store";
-import type {
-  AppState,
-  PaymentMethod,
-  RecordSaleResult,
-  SaleLine,
-} from "../types";
+import type { AppState, BoilBatchResult } from "../types";
 import { isSupabaseConfigured, supabase } from "../lib/supabase";
 
 type StoreApi = {
-  recordSale: (
-    lines: SaleLine[],
-    paymentMethod: PaymentMethod,
-  ) => Promise<RecordSaleResult>;
   updateWaitingCount: (n: number) => Promise<void>;
   updateSalesGoal: (n: number) => Promise<void>;
+  requestBoilBatch: (momoQty: number, kawaQty: number) => Promise<BoilBatchResult>;
+  cancelBoilBatch: (id: string) => Promise<BoilBatchResult>;
+  acceptBoilBatch: (id: string) => Promise<BoilBatchResult>;
+  deliverBoilBatch: (id: string) => Promise<BoilBatchResult>;
 };
 
 const StoreContext = createContext<StoreApi | null>(null);
@@ -33,21 +28,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     let active = true;
 
     const loadAll = async () => {
-      const [
-        { data: stock },
-        { data: menu },
-        { data: sales },
-        { data: status },
-      ] = await Promise.all([
-        supabase.from("stock_items").select("*").order("created_at"),
-        supabase.from("menu_items").select("*").order("created_at"),
-        supabase
-          .from("sales")
-          .select("*, sale_items(*)")
-          .order("created_at", { ascending: false })
-          .limit(300),
-        supabase.from("store_status").select("*").limit(1).maybeSingle(),
-      ]);
+      const [{ data: stock }, { data: menu }, { data: sales }, { data: status }, { data: batches }] =
+        await Promise.all([
+          supabase.from("stock_items").select("*").order("created_at"),
+          supabase.from("menu_items").select("*").order("created_at"),
+          supabase.from("sales").select("*, sale_items(*)").order("created_at", { ascending: false }).limit(300),
+          supabase.from("store_status").select("*").limit(1).maybeSingle(),
+          supabase.from("boil_batches").select("*").order("requested_at", { ascending: false }).limit(200),
+        ]);
       if (!active) return;
       if (stock) dataStore.replaceStockItems(stock);
       if (menu) dataStore.replaceMenuItems(menu);
@@ -59,12 +47,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             payment_method: s.payment_method,
             created_at: s.created_at,
             items: (s.sale_items ?? []).map(
-              (i: {
-                id: string;
-                menu_item_id: string;
-                quantity: number;
-                unit_price: number;
-              }) => ({
+              (i: { id: string; menu_item_id: string; quantity: number; unit_price: number }) => ({
                 id: i.id,
                 menu_item_id: i.menu_item_id,
                 quantity: i.quantity,
@@ -75,31 +58,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         );
       }
       if (status) dataStore.replaceStatus(status);
+      if (batches) dataStore.replaceBoilBatches(batches);
     };
 
     void loadAll();
     const channel = supabase
       .channel("public:operations")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "stock_items" },
-        () => void loadAll(),
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "sales" },
-        () => void loadAll(),
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "sale_items" },
-        () => void loadAll(),
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "store_status" },
-        () => void loadAll(),
-      )
+      .on("postgres_changes", { event: "*", schema: "public", table: "stock_items" }, () => void loadAll())
+      .on("postgres_changes", { event: "*", schema: "public", table: "sales" }, () => void loadAll())
+      .on("postgres_changes", { event: "*", schema: "public", table: "sale_items" }, () => void loadAll())
+      .on("postgres_changes", { event: "*", schema: "public", table: "store_status" }, () => void loadAll())
+      .on("postgres_changes", { event: "*", schema: "public", table: "boil_batches" }, () => void loadAll())
       .subscribe();
 
     return () => {
@@ -108,30 +77,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const recordSale = useCallback(
-    async (
-      lines: SaleLine[],
-      paymentMethod: PaymentMethod,
-    ): Promise<RecordSaleResult> => {
-      if (isSupabaseConfigured && supabase) {
-        const { data, error } = await supabase.rpc("record_sale", {
-          p_lines: lines,
-          p_payment_method: paymentMethod,
-        });
-        if (error) return { ok: false, message: error.message };
-        return data as RecordSaleResult;
-      }
-      return dataStore.recordSaleLocal(lines, paymentMethod);
-    },
-    [],
-  );
-
   const updateWaitingCount = useCallback(async (n: number) => {
     if (isSupabaseConfigured && supabase) {
-      await supabase.rpc("update_store_status", {
-        p_waiting_count: n,
-        p_sales_goal: null,
-      });
+      await supabase.rpc("update_store_status", { p_waiting_count: n, p_sales_goal: null });
       return;
     }
     dataStore.updateWaitingCountLocal(n);
@@ -139,16 +87,59 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const updateSalesGoal = useCallback(async (n: number) => {
     if (isSupabaseConfigured && supabase) {
-      await supabase.rpc("update_store_status", {
-        p_waiting_count: null,
-        p_sales_goal: n,
-      });
+      await supabase.rpc("update_store_status", { p_waiting_count: null, p_sales_goal: n });
       return;
     }
     dataStore.updateSalesGoalLocal(n);
   }, []);
 
-  const api: StoreApi = { recordSale, updateWaitingCount, updateSalesGoal };
+  const requestBoilBatch = useCallback(async (momoQty: number, kawaQty: number): Promise<BoilBatchResult> => {
+    if (isSupabaseConfigured && supabase) {
+      const { data, error } = await supabase.rpc("request_boil_batch", {
+        p_momo_qty: momoQty,
+        p_kawa_qty: kawaQty,
+      });
+      if (error) return { ok: false, message: error.message };
+      return data as BoilBatchResult;
+    }
+    return dataStore.requestBoilBatchLocal(momoQty, kawaQty);
+  }, []);
+
+  const cancelBoilBatch = useCallback(async (id: string): Promise<BoilBatchResult> => {
+    if (isSupabaseConfigured && supabase) {
+      const { data, error } = await supabase.rpc("cancel_boil_batch", { p_id: id });
+      if (error) return { ok: false, message: error.message };
+      return data as BoilBatchResult;
+    }
+    return dataStore.cancelBoilBatchLocal(id);
+  }, []);
+
+  const acceptBoilBatch = useCallback(async (id: string): Promise<BoilBatchResult> => {
+    if (isSupabaseConfigured && supabase) {
+      const { data, error } = await supabase.rpc("accept_boil_batch", { p_id: id });
+      if (error) return { ok: false, message: error.message };
+      return data as BoilBatchResult;
+    }
+    return dataStore.acceptBoilBatchLocal(id);
+  }, []);
+
+  const deliverBoilBatch = useCallback(async (id: string): Promise<BoilBatchResult> => {
+    if (isSupabaseConfigured && supabase) {
+      const { data, error } = await supabase.rpc("deliver_boil_batch", { p_id: id });
+      if (error) return { ok: false, message: error.message };
+      return data as BoilBatchResult;
+    }
+    return dataStore.deliverBoilBatchLocal(id);
+  }, []);
+
+  const api: StoreApi = {
+    updateWaitingCount,
+    updateSalesGoal,
+    requestBoilBatch,
+    cancelBoilBatch,
+    acceptBoilBatch,
+    deliverBoilBatch,
+  };
 
   return createElement(StoreContext.Provider, { value: api }, children);
 }
@@ -160,9 +151,5 @@ export function useStore() {
 }
 
 export function useAppState(): AppState {
-  return useSyncExternalStore(
-    dataStore.subscribe,
-    dataStore.getSnapshot,
-    dataStore.getSnapshot,
-  );
+  return useSyncExternalStore(dataStore.subscribe, dataStore.getSnapshot, dataStore.getSnapshot);
 }

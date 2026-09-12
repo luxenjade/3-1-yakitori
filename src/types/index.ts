@@ -54,3 +54,21 @@ export interface RecordSaleResult {
   message?: string;
   sale?: { id: string; total_price: number; payment_method: PaymentMethod };
 }
+
+export type BoilBatchStatus = "requested" | "accepted" | "delivered" | "cancelled";
+
+export interface BoilBatch {
+  id: string;
+  momo_qty: number;
+  kawa_qty: number;
+  status: BoilBatchStatus;
+  requested_at: string;
+  accepted_at: string | null;
+  delivered_at: string | null;
+}
+
+export interface BoilBatchResult {
+  ok: boolean;
+  message?: string;
+  id?: string;
+}
